@@ -14,12 +14,12 @@
 
 <style>
   /* ═══════════════════════════════════════════════════════════════
-     FRIENDS PAGE — sibling of index.html (the date page), same
-     booking-widget.js + Code.gs, Click-Capybara colors.
+     FRIENDS INVITE — standalone page (own repo, own Code.gs).
+     Click-Capybara colors.
 
      PERSONAL LINKS: send each friend their own link with ?name=
-       friends.html?name=Tom   → "You free this week, Tom?"
-       friends.html            → "You free this week, legend?"
+       …/?name=Tom   → "You free this week, Tom?"
+       …/            → "You free this week, legend?"
                                  (and the booking form asks for a name)
 
      SCREENS (only one visible at a time, via .show):
@@ -609,7 +609,8 @@
 
   #bookingMount .cbw label { line-height: 1.4; font-weight: 600; }
 
-  /* Safari-proof button colors (see date page for the why) */
+  /* Safari can drop button text color when the widget animates "color"
+     through a CSS variable — so set colors directly here */
   #bookingMount .cbw-grid button,
   #bookingMount .cbw-slots button,
   #bookingMount .cbw-btn,
@@ -971,6 +972,11 @@
      stakes:   the toggle text on the energy screen
      items:    [label, emoji] — 8 items + "Custom" fills a 3×3 grid
      ═══════════════════════════════════════════════════════════════ */
+  // ✏️ the /exec URL of THIS repo's Code.gs deployment (Apps Script → Deploy).
+  //    Until it's set, the page runs in 'mock' mode: fake times, nothing gets
+  //    booked for real — handy for testing the look.
+  const ENDPOINT = 'https://script.google.com/macros/s/AKfycbyIGlynSgWdDX5TsM5aEDZmwZtV00hijezjA_rv6bj1CzW1ZfcRbAu_WRZ9YTtBTOg-/exec';
+
   const PLANS = {
     food: {
       label: 'Food', emoji: '🍔', blurb: 'feed the squad',
@@ -1314,11 +1320,18 @@
 
     BookingWidget.init({
       el: '#booking',
-      endpoint: 'https://script.google.com/macros/s/AKfycby4fXDrxwlTkwqEcsvTE7z5HkMs7_-vgbRARlE_PRHtC57Gl4Ze4d8_LZDHLFKhzB7i/exec',
+      endpoint: ENDPOINT.startsWith('https://') ? ENDPOINT : 'mock',
       lang: 'en',
       accent: '#1c1b19',
       forceService: { id: p.service, name: title, duration: p.duration }, // keep in sync with Code.gs
       onBooked: onBooked,
+
+      // fake opening hours for 'mock' mode only (real ones come from Code.gs)
+      mock: {
+        hours: { 0: ['10:00-23:00'], 1: ['17:00-23:00'], 2: ['17:00-23:00'], 3: ['17:00-23:00'],
+                 4: ['17:00-23:00'], 5: ['17:00-24:00'], 6: ['10:00-24:00'] },
+        slotTimes: ['17:00', '18:00', '19:00', '20:00', '21:00']
+      },
 
       // no ?name= in the link → ask for it in the form
       fields: friendName ? ['email', 'note'] : ['name', 'email', 'note'],
