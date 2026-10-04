@@ -1,0 +1,1694 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>📣 incoming side quest</title>
+
+<!-- link preview (WhatsApp / iMessage), browser bar color, emoji favicon -->
+<meta property="og:title" content="📣 incoming side quest">
+<meta property="og:description" content="you free this week? two buttons, one correct answer.">
+<meta name="description" content="you free this week? two buttons, one correct answer.">
+<meta name="theme-color" content="#1c1b19">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤙</text></svg>">
+
+<style>
+  /* ═══════════════════════════════════════════════════════════════
+     FRIENDS PAGE — sibling of index.html (the date page), same
+     booking-widget.js + Code.gs, Click-Capybara colors.
+
+     PERSONAL LINKS: send each friend their own link with ?name=
+       friends.html?name=Tom   → "You free this week, Tom?"
+       friends.html            → "You free this week, legend?"
+                                 (and the booking form asks for a name)
+
+     SCREENS (only one visible at a time, via .show):
+       #stage → #burst → #category → #sub → #energy → #bookTime → #finalMsg
+     Search for "SCREEN" to jump around. All wording you might want to
+     change is marked with ✏️.
+     ═══════════════════════════════════════════════════════════════ */
+
+  :root{
+    --char: #1c1b19;
+    --char-2: #2a2825;
+    --char-3: #3a3732;
+    --yellow: #fcba01;
+    --yellow-soft: #ffd65c;
+    --cream: #fff8e6;
+    --sans: 'Avenir Next', 'Helvetica Neue', Arial, sans-serif;
+    --ease-out: cubic-bezier(.16, 1, .3, 1);
+    --ease-pop: cubic-bezier(.34, 1.56, .64, 1);
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    overflow: hidden;
+    background: var(--char);
+    font-family: var(--sans);
+    color: var(--cream);
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  button { font-family: var(--sans); border: none; cursor: pointer; }
+
+  button:focus-visible, input:focus-visible {
+    outline: 2px solid var(--yellow);
+    outline-offset: 3px;
+  }
+
+  /* ---- background: slowly drifting dot grid ---- */
+  .dots {
+    position: fixed;
+    inset: -40px;
+    z-index: 0;
+    pointer-events: none;
+    background-image: radial-gradient(rgba(252, 186, 1, 0.11) 1.4px, transparent 1.6px);
+    background-size: 26px 26px;
+    animation: drift 40s linear infinite;
+  }
+
+  .glow {
+    position: fixed;
+    width: 70vmax;
+    height: 70vmax;
+    left: 50%;
+    top: 30%;
+    translate: -50% -50%;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(252, 186, 1, 0.10), transparent 60%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  @keyframes drift { to { transform: translate(26px, 26px); } }
+
+  .eyebrow {
+    color: var(--yellow);
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    line-height: 1.5;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     SCREEN 1 — the ask (#stage)
+     ═══════════════════════════════════════════════════════════════ */
+
+  .stage {
+    position: relative;
+    z-index: 1;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: max(24px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom));
+    text-align: center;
+  }
+
+  .stage > .eyebrow, .stage > h1, .stage > .sub {
+    animation: rise 0.8s var(--ease-out) backwards;
+  }
+  .stage > h1   { animation-delay: 0.2s; }
+  .stage > .sub { animation-delay: 0.6s; }
+  .stage > .buttons { animation: fadeIn 0.7s ease 0.9s backwards; } /* opacity only: keeps #no's position:fixed working */
+
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: none; }
+  }
+  @keyframes fadeIn { from { opacity: 0; } }
+
+  h1 {
+    font-size: clamp(34px, 9vw, 64px);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1.05;
+    margin: 0 0 16px;
+    max-width: 700px;
+    text-wrap: balance;
+  }
+
+  /* yellow marker swipe behind the friend's name */
+  .name {
+    position: relative;
+    white-space: nowrap;
+    color: var(--char);
+    padding: 0 0.12em;
+    background: linear-gradient(var(--yellow), var(--yellow)) no-repeat left 55% / 0% 78%;
+    animation: swipe 0.6s var(--ease-out) 0.75s forwards;
+  }
+
+  @keyframes swipe { to { background-size: 100% 78%; } }
+
+  .sub {
+    color: rgba(255, 248, 230, 0.55);
+    font-size: 14px;
+    margin-bottom: 46px;
+  }
+
+  .buttons {
+    position: relative;
+    display: flex;
+    gap: 18px;
+    align-items: center;
+    justify-content: center;
+    min-height: 90px;
+    width: 100%;
+  }
+
+  .buttons.has-maybe { flex-direction: column; gap: 28px; }
+
+  #yes {
+    --yes-scale: 1;
+    position: relative;
+    z-index: 2;
+    background: var(--yellow);
+    color: var(--char);
+    padding: 18px 38px;
+    font-size: 18px;
+    font-weight: 800;
+    border-radius: 14px;
+    box-shadow: 0 6px 0 #b98700, 0 14px 30px rgba(252, 186, 1, 0.25);
+    transform: scale(var(--yes-scale));
+    transition: transform 0.35s var(--ease-pop), box-shadow 0.15s ease;
+  }
+
+  #yes:active {
+    transform: scale(var(--yes-scale)) translateY(4px);
+    box-shadow: 0 2px 0 #b98700, 0 8px 20px rgba(252, 186, 1, 0.25);
+  }
+
+  #no {
+    position: relative;
+    background: transparent;
+    color: var(--cream);
+    padding: 18px 30px;
+    font-size: 16px;
+    font-weight: 600;
+    border-radius: 14px;
+    border: 2px solid rgba(255, 248, 230, 0.22);
+    white-space: nowrap;
+    transition: transform 0.18s ease;
+  }
+
+  #no.fixed {
+    position: fixed;
+    z-index: 10;
+    transition: left 0.55s var(--ease-out), top 0.55s var(--ease-out), transform 0.3s ease, background 0.4s ease;
+  }
+
+  #no.surrendered {
+    background: var(--yellow);
+    color: var(--char);
+    border-color: transparent;
+    font-weight: 800;
+    animation: wiggle 0.5s ease 2;
+  }
+
+  @keyframes wiggle {
+    0%, 100% { rotate: 0deg; }
+    25% { rotate: -7deg; }
+    75% { rotate: 7deg; }
+  }
+
+  #maybe {
+    background: transparent;
+    color: var(--cream);
+    border: 2px dashed rgba(252, 186, 1, 0.5);
+    border-radius: 14px;
+    padding: 13px 22px;
+    font-size: 14px;
+    font-weight: 600;
+    white-space: nowrap;
+    animation: popIn 0.45s var(--ease-pop);
+  }
+
+  #maybe[hidden] { display: none; }
+
+  @keyframes popIn {
+    from { opacity: 0; transform: scale(0.6); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  .caption {
+    position: fixed;
+    z-index: 5;
+    width: 260px;
+    margin-left: -130px;
+    text-align: center;
+    color: var(--yellow);
+    font-size: 13px;
+    font-weight: 600;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease, top 0.25s ease;
+  }
+
+  .caption.visible { opacity: 0.85; }
+
+  /* ═══════════════════════════════════════════════════════════════
+     SHARED SCREEN LAYOUT — screens 2+ reuse this
+     ═══════════════════════════════════════════════════════════════ */
+
+  .screen {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: max(64px, env(safe-area-inset-top)) 22px max(32px, env(safe-area-inset-bottom));
+    background: var(--char);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* centered when it fits, scrollable (never clipped) when it doesn't */
+  .screen::before, .screen::after { content: ''; flex: 1 0 0; }
+
+  .screen.show { display: flex; animation: fadeIn 0.4s ease; }
+
+  .screen.show > :not(.back-link):not(.overlay) { animation: rise 0.55s var(--ease-out) backwards; }
+  .screen.show > :nth-child(3) { animation-delay: 0.05s; }
+  .screen.show > :nth-child(4) { animation-delay: 0.10s; }
+  .screen.show > :nth-child(5) { animation-delay: 0.15s; }
+  .screen.show > :nth-child(6) { animation-delay: 0.20s; }
+  .screen.show > :nth-child(7) { animation-delay: 0.25s; }
+
+  .screen h2 {
+    font-size: clamp(28px, 8vw, 46px);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1.08;
+    margin: 0 0 10px;
+    max-width: 560px;
+    text-wrap: balance;
+  }
+
+  .screen p.tag {
+    color: rgba(255, 248, 230, 0.6);
+    font-size: 14px;
+    line-height: 1.5;
+    margin: 0 0 32px;
+    max-width: 420px;
+  }
+
+  .back-link {
+    position: absolute;
+    top: max(18px, env(safe-area-inset-top));
+    left: 16px;
+    background: none;
+    color: rgba(255, 248, 230, 0.5);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 10px;
+  }
+
+  .back-link:hover { color: var(--cream); }
+
+  .btn-main {
+    background: var(--yellow);
+    color: var(--char);
+    font-size: 15px;
+    font-weight: 800;
+    padding: 15px 30px;
+    border-radius: 12px;
+    box-shadow: 0 5px 0 #b98700;
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+  }
+
+  .btn-main:active { transform: translateY(4px); box-shadow: 0 1px 0 #b98700; }
+
+  .text-link {
+    margin-top: 22px;
+    background: none;
+    color: var(--yellow);
+    font-size: 14px;
+    font-weight: 600;
+    padding: 10px 14px;
+    text-decoration: underline;
+    text-underline-offset: 4px;
+    text-decoration-color: rgba(252, 186, 1, 0.45);
+  }
+
+  /* ---- SCREEN 2 (#burst) ---- */
+  .sticker {
+    --tilt: -6deg;
+    width: 124px;
+    height: 124px;
+    flex-shrink: 0;
+    object-fit: cover;
+    border-radius: 22px;
+    border: 4px solid var(--yellow);
+    transform: rotate(var(--tilt));
+    margin-bottom: 22px;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+  }
+
+  .sticker.alt { --tilt: 6deg; }
+
+  .screen.show > .sticker { animation: stickerPop 0.5s var(--ease-pop) both; }
+  .screen.show > .sticker.party { animation: stickerParty 0.9s var(--ease-pop); }
+
+  @keyframes stickerPop {
+    from { opacity: 0; transform: rotate(var(--tilt)) scale(0.4); }
+    to   { opacity: 1; transform: rotate(var(--tilt)) scale(1); }
+  }
+
+  @keyframes stickerParty {
+    0%   { transform: rotate(var(--tilt)) scale(1); }
+    45%  { transform: rotate(calc(var(--tilt) + 200deg)) scale(1.3); }
+    100% { transform: rotate(calc(var(--tilt) + 360deg)) scale(1); }
+  }
+
+  /* ---- SCREEN 3 (#category): three big lanes ---- */
+  .lanes {
+    display: grid;
+    gap: 12px;
+    width: 100%;
+    max-width: 440px;
+  }
+
+  .lane {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    text-align: left;
+    padding: 18px 20px;
+    border-radius: 16px;
+    background: var(--char-2);
+    border: 2px solid var(--char-3);
+    color: var(--cream);
+    transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+  }
+
+  .lane:hover { border-color: var(--yellow); transform: translateX(4px); }
+  .lane:active { transform: scale(0.98); }
+
+  .lane .emoji { font-size: 34px; transition: transform 0.3s var(--ease-pop); }
+  .lane:hover .emoji { transform: scale(1.15) rotate(-8deg); }
+
+  .lane b { display: block; font-size: 19px; font-weight: 800; letter-spacing: -0.01em; }
+  .lane small { display: block; margin-top: 3px; font-size: 13px; color: rgba(255, 248, 230, 0.55); }
+
+  .lane .arrow { margin-left: auto; color: var(--yellow); font-size: 20px; font-weight: 800; }
+
+  .lane.selected { background: var(--yellow); border-color: var(--yellow); color: var(--char); }
+  .lane.selected small, .lane.selected .arrow { color: rgba(28, 27, 25, 0.7); }
+
+  /* ---- SCREEN 4 (#sub): activity grid, filled from PLANS in JS ---- */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(90px, 130px));
+    gap: 12px;
+  }
+
+  @media (max-width: 420px) {
+    .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; width: 100%; }
+  }
+
+  .card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 16px 8px;
+    border-radius: 14px;
+    background: var(--char-2);
+    border: 2px solid var(--char-3);
+    color: var(--cream);
+    font-size: 13px;
+    font-weight: 700;
+    transition: transform 0.2s ease, border-color 0.2s ease;
+  }
+
+  .card .emoji { font-size: 28px; transition: transform 0.3s var(--ease-pop); }
+  .card:hover { border-color: var(--yellow); transform: translateY(-3px); }
+  .card:hover .emoji { transform: scale(1.18) rotate(-6deg); }
+  .card:active { transform: scale(0.96); }
+  .card.selected { background: var(--yellow); border-color: var(--yellow); color: var(--char); }
+
+  .custom-wrap {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    margin-top: 24px;
+  }
+
+  .custom-wrap.show { display: flex; }
+
+  .custom-wrap input {
+    width: 270px;
+    max-width: 100%;
+    padding: 13px 18px;
+    border-radius: 12px;
+    border: 2px solid var(--char-3);
+    background: var(--char-2);
+    color: var(--cream);
+    font-family: var(--sans);
+    font-size: 16px;
+    text-align: center;
+    outline: none;
+  }
+
+  .custom-wrap input:focus { border-color: var(--yellow); }
+  .custom-wrap input::placeholder { color: rgba(255, 248, 230, 0.35); }
+
+  /* ---- SCREEN 5 (#energy): slider + stakes switch ---- */
+  .energy-emoji { font-size: 64px; line-height: 1; margin: 4px 0 12px; }
+  .energy-emoji.pop { animation: popIn 0.35s var(--ease-pop); }
+
+  .energy-label {
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    min-height: 1.4em;
+    margin-bottom: 24px;
+  }
+
+  .range {
+    -webkit-appearance: none;
+    appearance: none;
+    width: min(320px, 100%);
+    height: 10px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--char-3), var(--yellow));
+    cursor: pointer;
+  }
+
+  .range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    background: var(--yellow);
+    border: 4px solid var(--char);
+    box-shadow: 0 0 0 2px var(--yellow), 0 4px 12px rgba(0, 0, 0, 0.5);
+  }
+
+  .range::-moz-range-thumb {
+    width: 24px;
+    height: 24px;
+    border-radius: 8px;
+    background: var(--yellow);
+    border: 4px solid var(--char);
+  }
+
+  .range-ends {
+    display: flex;
+    justify-content: space-between;
+    width: min(320px, 100%);
+    margin-top: 12px;
+    font-size: 12px;
+    color: rgba(255, 248, 230, 0.5);
+  }
+
+  .switch {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-top: 34px;
+    padding: 14px 18px;
+    max-width: 360px;
+    border-radius: 14px;
+    background: var(--char-2);
+    border: 2px solid var(--char-3);
+    text-align: left;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .switch input { position: absolute; opacity: 0; pointer-events: none; }
+
+  .switch .track {
+    position: relative;
+    flex: none;
+    width: 46px;
+    height: 28px;
+    border-radius: 999px;
+    background: var(--char-3);
+    transition: background 0.2s ease;
+  }
+
+  .switch .track::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--cream);
+    transition: transform 0.25s var(--ease-pop);
+  }
+
+  .switch input:checked + .track { background: var(--yellow); }
+  .switch input:checked + .track::after { transform: translateX(18px); background: var(--char); }
+  .switch input:focus-visible + .track { outline: 2px solid var(--yellow); outline-offset: 3px; }
+
+  .energy-go { margin-top: 30px; }
+
+  /* ═══════════════════════════════════════════════════════════════
+     SCREEN 6 (#bookTime) — booking widget styled as a yellow squad
+     pass (same idea as the date page, other colors). Only the
+     widget's CSS variables are overridden here.
+     ═══════════════════════════════════════════════════════════════ */
+
+  #bookingMount {
+    width: 100%;
+    max-width: 460px;
+    filter: drop-shadow(0 18px 34px rgba(0, 0, 0, 0.5));
+  }
+
+  #bookingMount .cbw {
+    --cbw-accent: var(--char);
+    --cbw-ink: var(--char);
+    --cbw-mut: rgba(28, 27, 25, 0.62);
+    --cbw-line: rgba(28, 27, 25, 0.22);
+    --cbw-bg: rgba(255, 255, 255, 0.38);
+    --cbw-soft: rgba(28, 27, 25, 0.09);
+    --cbw-radius: 16px;
+    background: var(--yellow);
+    border: none;
+    font-family: var(--sans);
+    text-align: left;
+    -webkit-mask:
+      radial-gradient(circle 12px at 0 50%, transparent 98%, #000) left / 51% 100% no-repeat,
+      radial-gradient(circle 12px at 100% 50%, transparent 98%, #000) right / 51% 100% no-repeat;
+    mask:
+      radial-gradient(circle 12px at 0 50%, transparent 98%, #000) left / 51% 100% no-repeat,
+      radial-gradient(circle 12px at 100% 50%, transparent 98%, #000) right / 51% 100% no-repeat;
+  }
+
+  #bookingMount .cbw h3 {
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    padding-bottom: 14px;
+    border-bottom: 2px dashed rgba(28, 27, 25, 0.35);
+    margin-bottom: 16px;
+  }
+
+  #bookingMount .cbw input,
+  #bookingMount .cbw textarea { font-size: 16px; }
+
+  #bookingMount .cbw input:focus,
+  #bookingMount .cbw textarea:focus { border-color: var(--char); }
+
+  #bookingMount .cbw input::placeholder,
+  #bookingMount .cbw textarea::placeholder { color: rgba(28, 27, 25, 0.4); }
+
+  #bookingMount .cbw label { line-height: 1.4; font-weight: 600; }
+
+  /* Safari-proof button colors (see date page for the why) */
+  #bookingMount .cbw-grid button,
+  #bookingMount .cbw-slots button,
+  #bookingMount .cbw-btn,
+  #bookingMount .cbw-nav {
+    color: var(--char);
+    -webkit-text-fill-color: currentColor;
+    -webkit-appearance: none;
+    appearance: none;
+    transition: border-color 0.12s ease, background 0.12s ease;
+  }
+
+  #bookingMount .cbw-grid button:disabled { color: rgba(28, 27, 25, 0.28); }
+
+  #bookingMount .cbw-slots button:hover,
+  #bookingMount .cbw-btn:not(.pri):hover { border-color: var(--char); }
+
+  /* things on the charcoal accent get yellow text */
+  #bookingMount .cbw-grid button.sel { background: var(--char); }
+  #bookingMount .cbw-btn.pri,
+  #bookingMount .cbw-grid button.sel,
+  #bookingMount .cbw-slots button.sel,
+  #bookingMount .cbw-done .ico { color: var(--yellow); }
+
+  #bookingMount .cbw-err { color: #6b1300; font-weight: 700; }
+  #bookingMount .cbw label.cbw-consent { color: var(--char); font-weight: 600; }
+
+  /* ═══════════════════════════════════════════════════════════════
+     SCREEN 7 (#finalMsg) — countdown + squad pass
+     ═══════════════════════════════════════════════════════════════ */
+
+  #finalMsg .sticker { width: 96px; height: 96px; margin-bottom: 14px; }
+
+  .countdown { display: flex; gap: clamp(14px, 5vw, 30px); justify-content: center; margin: 6px 0 26px; }
+  .countdown[hidden] { display: none; }
+  .countdown div { display: flex; flex-direction: column; align-items: center; min-width: 3ch; }
+
+  .countdown b {
+    font-size: clamp(38px, 11vw, 62px);
+    font-weight: 800;
+    line-height: 1;
+    color: var(--yellow);
+    letter-spacing: -0.03em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .countdown span { margin-top: 8px; font-size: 12px; color: rgba(255, 248, 230, 0.55); }
+
+  .pass-wrap {
+    width: 100%;
+    max-width: 400px;
+    margin: 4px 0 22px;
+    filter: drop-shadow(0 16px 30px rgba(0, 0, 0, 0.5));
+  }
+
+  .pass {
+    --stub: 92px;
+    display: flex;
+    background: var(--yellow);
+    color: var(--char);
+    border-radius: 14px;
+    transform: rotate(1.5deg);
+    text-align: left;
+    -webkit-mask:
+      radial-gradient(circle 11px at calc(100% - var(--stub)) 0, transparent 98%, #000) top / 100% 51% no-repeat,
+      radial-gradient(circle 11px at calc(100% - var(--stub)) 100%, transparent 98%, #000) bottom / 100% 51% no-repeat;
+    mask:
+      radial-gradient(circle 11px at calc(100% - var(--stub)) 0, transparent 98%, #000) top / 100% 51% no-repeat,
+      radial-gradient(circle 11px at calc(100% - var(--stub)) 100%, transparent 98%, #000) bottom / 100% 51% no-repeat;
+  }
+
+  .pass-main { flex: 1; min-width: 0; padding: 18px 18px 18px 20px; }
+
+  .pass-title { font-size: 21px; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 12px; }
+
+  .pass dl { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; margin: 0; }
+  .pass dl .wide { grid-column: 1 / -1; }
+  .pass dt { font-size: 11px; font-weight: 600; color: rgba(28, 27, 25, 0.6); margin-bottom: 2px; }
+  .pass dd { margin: 0; font-size: 15px; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
+
+  .pass-stub {
+    width: var(--stub);
+    flex: none;
+    border-left: 2px dashed rgba(28, 27, 25, 0.35);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 16px 10px;
+  }
+
+  .pass-stub svg { width: 56px; height: 96px; display: block; }
+  .pass-stub span { font-size: 11px; font-weight: 600; color: rgba(28, 27, 25, 0.7); text-align: center; line-height: 1.3; }
+
+  /* ═══════════════════════════════════════════════════════════════
+     WHEEL — "can't decide? spin it" on screen 3, built from PLANS
+     ═══════════════════════════════════════════════════════════════ */
+
+  .overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: max(24px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom));
+    background: rgba(18, 17, 15, 0.86);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+    overflow-y: auto;
+  }
+
+  .overlay[hidden] { display: none; }
+  .overlay::before, .overlay::after { content: ''; flex: 1 0 0; }
+  .overlay:not([hidden]) .wheel-card { animation: rise 0.45s var(--ease-out); }
+
+  .wheel-card { position: relative; width: 100%; max-width: 380px; text-align: center; }
+
+  .wheel-card h2 {
+    font-size: clamp(26px, 7vw, 38px);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    margin: 0 0 26px;
+  }
+
+  .wheel-close {
+    position: absolute;
+    top: -10px;
+    right: -6px;
+    background: none;
+    color: rgba(255, 248, 230, 0.55);
+    font-size: 30px;
+    line-height: 1;
+    padding: 6px 12px;
+  }
+
+  .wheel-box { position: relative; width: min(78vw, 320px); aspect-ratio: 1; margin: 0 auto; }
+
+  #wheel { display: block; width: 100%; height: 100%; will-change: transform; filter: drop-shadow(0 18px 40px rgba(0, 0, 0, 0.55)); }
+
+  .wheel-pointer {
+    position: absolute;
+    top: -12px;
+    left: 50%;
+    width: 28px;
+    height: 36px;
+    margin-left: -14px;
+    z-index: 2;
+    background: var(--yellow);
+    clip-path: polygon(50% 100%, 0 0, 100% 0);
+    transform-origin: 50% 20%;
+  }
+
+  .wheel-hub {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 72px;
+    height: 72px;
+    margin: -36px 0 0 -36px;
+    z-index: 2;
+    border-radius: 50%;
+    background: var(--char);
+    color: var(--yellow);
+    border: 4px solid var(--yellow);
+    font-size: 16px;
+    font-weight: 800;
+    transition: transform 0.2s var(--ease-pop);
+  }
+
+  .wheel-hub:hover:not(:disabled) { transform: scale(1.07); }
+  .wheel-hub:disabled { cursor: default; }
+
+  .wheel-result { min-height: 1.4em; margin: 26px 0 0; font-size: 20px; font-weight: 800; letter-spacing: -0.01em; }
+  .wheel-result.pop { animation: popIn 0.45s var(--ease-pop); }
+
+  .wheel-actions { display: flex; flex-direction: column; align-items: center; gap: 4px; margin-top: 18px; }
+  .wheel-actions[hidden] { display: none; }
+  .wheel-actions .text-link { margin-top: 6px; }
+
+  /* ---- confetti + emoji bursts ---- */
+  .confetti-piece {
+    position: fixed;
+    top: -24px;
+    z-index: 300;
+    pointer-events: none;
+    line-height: 1;
+    animation: fall linear forwards;
+  }
+
+  @keyframes fall { to { transform: translate(var(--drift, 0px), 110vh) rotate(var(--spin, 600deg)); } }
+
+  .pop-emoji {
+    position: fixed;
+    z-index: 301;
+    pointer-events: none;
+    font-size: 22px;
+    line-height: 1;
+    transform: translate(-50%, -50%);
+    animation: emojiPop 1.1s var(--ease-out) forwards;
+  }
+
+  @keyframes emojiPop {
+    0%   { opacity: 1; transform: translate(-50%, -50%) scale(0.3); }
+    70%  { opacity: 1; }
+    100% { opacity: 0; transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(1.15) rotate(var(--rot)); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      animation-delay: 0s !important;
+    }
+    .name { background-size: 100% 78%; }
+    .confetti-piece, .pop-emoji { display: none; }
+    #no.fixed { transition: left 0.2s ease, top 0.2s ease; }
+  }
+</style>
+</head>
+<body>
+
+<div class="dots"></div>
+<div class="glow"></div>
+
+<!-- SCREEN 1: the ask -->
+<div class="stage" id="stage">
+  <div class="eyebrow">incoming side quest 📣</div>
+  <h1>You free this week, <span class="name" id="friendName">legend</span>?</h1>
+  <div class="sub">two buttons. one correct answer.</div>
+  <div class="buttons" id="buttonRow">
+    <button id="yes">I'm in</button>
+    <button id="no">busy</button>
+    <button id="maybe" hidden>maybe (= yes)</button>
+  </div>
+</div>
+
+<div class="caption" id="caption" aria-live="polite"></div>
+
+<!-- SCREEN 2: hyped -->
+<div class="screen" id="burst">
+  <img class="sticker" src="yeah_dog.webp" alt="">
+  <h2>Let's gooo 🙌</h2>
+  <p class="tag" id="burstTag">That took a while, but we'll pretend it didn't.</p>
+  <button class="btn-main" id="continueBtn">pick the plan →</button>
+</div>
+
+<!-- SCREEN 3: food / drinks / sport -->
+<div class="screen" id="category">
+  <button class="back-link" data-go="burst">‹ back</button>
+  <div class="eyebrow">round two</div>
+  <h2>What are we doing?</h2>
+  <p class="tag">pick a lane</p>
+  <div class="lanes" id="lanes"></div>
+  <button type="button" class="text-link" id="openWheel">can't decide? spin it 🎡</button>
+</div>
+
+<!-- SCREEN 4: the submenu for the chosen category -->
+<div class="screen" id="sub">
+  <button class="back-link" data-go="category">‹ other lane</button>
+  <div class="eyebrow" id="subEyebrow">food</div>
+  <h2 id="subTitle">What are we eating?</h2>
+  <p class="tag">pick one, or make up your own</p>
+  <div class="grid" id="subGrid"></div>
+  <div class="custom-wrap" id="customWrap">
+    <input type="text" id="customInput" placeholder="what's the plan?" maxlength="40" enterkeyhint="done">
+    <button class="btn-main" id="customConfirm">that one</button>
+  </div>
+</div>
+
+<!-- SCREEN 5: energy level + stakes -->
+<div class="screen" id="energy">
+  <button class="back-link" id="backFromEnergy">‹ change plan</button>
+  <div class="eyebrow">round three</div>
+  <h2>How hard are we going?</h2>
+  <p class="tag">set the energy level</p>
+  <div class="energy-emoji" id="energyEmoji" aria-hidden="true">😎</div>
+  <div class="energy-label" id="energyLabel" aria-live="polite">good vibes, solid effort</div>
+  <input type="range" class="range" id="energyRange" min="0" max="4" step="1" value="2" aria-label="Energy level">
+  <div class="range-ends"><span>couch mode</span><span>full send</span></div>
+  <label class="switch">
+    <input type="checkbox" id="stakesToggle" checked>
+    <span class="track"></span>
+    <span id="stakesText">loser pays the first round 🍺</span>
+  </label>
+  <button class="btn-main energy-go" id="energyGo">lock the vibe</button>
+</div>
+
+<!-- SCREEN 6: booking -->
+<div class="screen" id="bookTime">
+  <button class="back-link" data-go="energy">‹ change energy</button>
+  <div class="eyebrow">round four</div>
+  <h2>When works?</h2>
+  <p class="tag">pick a slot, the squad adapts</p>
+  <div id="bookingMount"><div id="booking"></div></div>
+</div>
+
+<!-- SCREEN 7: it's on -->
+<div class="screen" id="finalMsg">
+  <img class="sticker alt" src="excited.webp" alt="">
+  <div class="eyebrow">it's on</div>
+  <h2 id="finalTitle">Countdown's running</h2>
+  <div class="countdown" id="countdown" hidden>
+    <div><b id="cdD">0</b><span>days</span></div>
+    <div><b id="cdH">00</b><span>hours</span></div>
+    <div><b id="cdM">00</b><span>min</span></div>
+    <div><b id="cdS">00</b><span>sec</span></div>
+  </div>
+  <div class="pass-wrap">
+    <div class="pass">
+      <div class="pass-main">
+        <div class="pass-title">Squad pass, all access</div>
+        <dl>
+          <div><dt>Who</dt><dd id="psWho">you</dd></div>
+          <div><dt>Plan</dt><dd id="psPlan">tba</dd></div>
+          <div><dt>Energy</dt><dd id="psEnergy">tba</dd></div>
+          <div><dt>Stakes</dt><dd id="psStakes">none</dd></div>
+          <div class="wide"><dt>When</dt><dd id="psWhen">TBA</dd></div>
+        </dl>
+      </div>
+      <div class="pass-stub">
+        <svg id="psBarcode" viewBox="0 0 56 96" aria-hidden="true"></svg>
+        <span id="psGate">Gate 7</span>
+      </div>
+    </div>
+  </div>
+  <p class="tag" id="finalSub">Screenshot the pass. Flaking is not an option 🤝</p>
+  <button type="button" class="text-link" id="shakeHint">psst… shake your phone</button>
+</div>
+
+<!-- WHEEL overlay -->
+<div class="overlay" id="wheelOverlay" hidden role="dialog" aria-modal="true" aria-labelledby="wheelTitle">
+  <div class="wheel-card">
+    <button type="button" class="wheel-close" id="closeWheel" aria-label="Close the wheel">×</button>
+    <div class="eyebrow">for the chronically undecided</div>
+    <h2 id="wheelTitle">Let the wheel plan it</h2>
+    <div class="wheel-box">
+      <div class="wheel-pointer" id="wheelPointer"></div>
+      <svg id="wheel" viewBox="-150 -150 300 300" aria-hidden="true"></svg>
+      <button type="button" class="wheel-hub" id="spinBtn">SPIN</button>
+    </div>
+    <p class="wheel-result" id="wheelResult" aria-live="polite"></p>
+    <div class="wheel-actions" id="wheelActions" hidden>
+      <button type="button" class="btn-main" id="wheelAccept">deal, let's go</button>
+      <button type="button" class="text-link" id="wheelRespin">nah, spin again</button>
+    </div>
+  </div>
+</div>
+
+<script src="booking-widget.js"></script>
+
+<script>
+(function () {
+  /* ═══════════════════════════════════════════════════════════════
+     ✏️ CONTENT — everything plan-related lives here.
+     service:  must match a service id in Code.gs (that's where the
+               opening hours per category are set)
+     duration: minutes — keep it the same as in Code.gs
+     stakes:   the toggle text on the energy screen
+     items:    [label, emoji] — 8 items + "Custom" fills a 3×3 grid
+     ═══════════════════════════════════════════════════════════════ */
+  const PLANS = {
+    food: {
+      label: 'Food', emoji: '🍔', blurb: 'feed the squad',
+      title: 'What are we eating?', service: 'hang-food', duration: 120,
+      stakes: 'slowest eater pays dessert 🍰',
+      items: [['Burger', '🍔'], ['Döner', '🥙'], ['Pizza', '🍕'], ['BBQ', '🍖'],
+              ['Brunch', '🥞'], ['Buffet', '🍣'], ['Asian', '🍜'], ['Tacos', '🌮']]
+    },
+    drinks: {
+      label: 'Drinks', emoji: '🍻', blurb: 'first round is on someone',
+      title: 'Where are we drinking?', service: 'hang-drinks', duration: 180,
+      stakes: 'whoever leaves first pays the next round 🍻',
+      items: [['Beer garden', '🍺'], ['Cocktails', '🍸'], ['Craft beer', '🍻'], ['Wine bar', '🍷'],
+              ['Rooftop', '🌆'], ['Karaoke', '🎤'], ['Pub quiz', '🧠'], ['Kiosk tour', '🥤']]
+    },
+    sport: {
+      label: 'Sport', emoji: '⚽', blurb: 'sweat first, beer after',
+      title: 'What are we playing?', service: 'hang-sport', duration: 90,
+      stakes: 'loser pays the first round 🍺',
+      items: [['Football', '⚽'], ['Bouldering', '🧗'], ['Padel', '🎾'], ['Bowling', '🎳'],
+              ['Darts', '🎯'], ['Go-kart', '🏎️'], ['Running', '🏃'], ['Ping pong', '🏓']]
+    }
+  };
+
+  // ✏️ energy slider steps (short = what goes into the calendar title)
+  const ENERGY = [
+    { emoji: '🛋️', label: 'chill & chat',             short: 'chill' },
+    { emoji: '😌', label: 'relaxed but present',       short: 'relaxed' },
+    { emoji: '😎', label: 'good vibes, solid effort',  short: 'good vibes' },
+    { emoji: '🔥', label: 'competitive mode',          short: 'competitive' },
+    { emoji: '🚀', label: 'full send, no survivors',   short: 'full send' }
+  ];
+
+  // ✏️ screen 1: the "busy" button's labels + the captions it triggers
+  const NO_LABELS = ['busy', 'kinda busy', 'I have a thing', 'washing my hair', 'my cat needs me',
+                     'it might rain', 'gym day', "I'm broke", 'next week?', 'new phone, who dis', 'ugh'];
+  const CAPTIONS = ['nice try', 'gym? we can literally go to the gym', 'your calendar is not that full',
+                    'the couch will survive without you', 'excuse rejected', 'bold of you to assume you\'re busy',
+                    'the group chat is watching', 'I\'ll wait', 'that button works for us now',
+                    'we both know you\'re in'];
+  const SURRENDER_AT = 12;  // dodges before "busy" gives up
+
+  // ✏️ the "psst…" link under the pass
+  const SHAKE_TEXTS = {
+    desktop: 'psst… click here',
+    iphone:  'psst… tap here, then shake your phone',
+    android: 'psst… shake your phone',
+    ready:   'now shake it 📳'
+  };
+
+  // ✏️ fun stub lines on the final pass
+  const GATES = ['Gate: wherever the snacks are', 'Gate 7 (there is no gate 7)', 'Row: front, obviously',
+                 'Section: main characters', 'Gate: follow the noise'];
+
+  /* ═══════════════════════════════════════════════════════════════
+     helpers + state
+     ═══════════════════════════════════════════════════════════════ */
+
+  const $ = id => document.getElementById(id);
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // ?name=Tom from the link (max 30 chars, only ever used as text)
+  const urlName = (new URLSearchParams(location.search).get('name') || '').trim().slice(0, 30);
+  let friendName = urlName;
+  if (urlName) $('friendName').textContent = urlName;
+
+  const state = { cat: null, activity: null, energy: ENERGY[2], stakes: true };
+
+  const screens = ['burst', 'category', 'sub', 'energy', 'bookTime', 'finalMsg'];
+  function show(id) {
+    screens.forEach(s => $(s).classList.toggle('show', s === id));
+    $(id).scrollTop = 0;
+  }
+
+  document.querySelectorAll('[data-go]').forEach(b =>
+    b.addEventListener('click', () => show(b.dataset.go)));
+
+  const originalTitle = document.title;
+  document.addEventListener('visibilitychange', () => {
+    document.title = document.hidden ? 'the squad is waiting 👀' : originalTitle;
+  });
+
+  /* ═══════════════════════════════════════════════════════════════
+     SCREEN 1 — dodging "busy" button (same mechanics as the date page)
+     ═══════════════════════════════════════════════════════════════ */
+
+  const noBtn = $('no'), yesBtn = $('yes'), maybeBtn = $('maybe'), caption = $('caption');
+  const COUNT_COOLDOWN = 700;
+  let dodgeCount = 0, lastCountedAt = 0, yesScale = 1, surrendered = false, captionIdx = 0;
+
+  function fixNoButtonPosition() {
+    if (noBtn.classList.contains('fixed')) return;
+    const r = noBtn.getBoundingClientRect();
+    noBtn.classList.add('fixed');
+    noBtn.style.left = r.left + 'px';
+    noBtn.style.top = r.top + 'px';
+  }
+
+  function positionCaption() {
+    const anchor = maybeBtn.hidden ? yesBtn : maybeBtn;
+    const r = anchor.getBoundingClientRect();
+    caption.style.left = Math.min(Math.max(r.left + r.width / 2, 140), window.innerWidth - 140) + 'px';
+    caption.style.top = (r.bottom + 14) + 'px';
+  }
+
+  function showCaption(text) {
+    caption.classList.remove('visible');
+    setTimeout(() => { caption.textContent = text; positionCaption(); caption.classList.add('visible'); }, 150);
+  }
+
+  function getSafeZones() {
+    const pad = 22;
+    return ['#stage .eyebrow', '#stage h1', '#stage .sub']
+      .map(q => document.querySelector(q))
+      .concat([yesBtn, caption, maybeBtn])
+      .filter(el => el && !el.hidden)
+      .map(el => {
+        const r = el.getBoundingClientRect();
+        return { left: r.left - pad, top: r.top - pad, right: r.right + pad, bottom: r.bottom + pad };
+      });
+  }
+
+  const overlapsZone = (x, y, w, h, zones) =>
+    zones.some(z => x < z.right && x + w > z.left && y < z.bottom && y + h > z.top);
+
+  function findSpot(w, h, avoidX, avoidY) {
+    const zones = getSafeZones();
+    let x, y;
+    for (let i = 0; i < 60; i++) {
+      x = 16 + Math.random() * Math.max(1, window.innerWidth - w - 32);
+      y = 16 + Math.random() * Math.max(1, window.innerHeight - h - 32);
+      const nearPointer = avoidX != null && Math.hypot(x - avoidX, y - avoidY) < 140;
+      if (!nearPointer && !overlapsZone(x, y, w, h, zones)) break;
+    }
+    return { x, y };
+  }
+
+  function dodge(px, py) {
+    if (surrendered) return;
+    fixNoButtonPosition();
+
+    // movement on every trigger, but a "try" counts only once per cooldown
+    const counts = Date.now() - lastCountedAt > COUNT_COOLDOWN;
+    if (counts) {
+      lastCountedAt = Date.now();
+      dodgeCount++;
+      noBtn.textContent = NO_LABELS[Math.min(dodgeCount, NO_LABELS.length - 1)];
+      noBtn.style.transform = `scale(${Math.max(0.72, 1 - dodgeCount * 0.03)})`;
+    }
+
+    const spot = findSpot(noBtn.offsetWidth, noBtn.offsetHeight, px, py);
+    noBtn.style.left = spot.x + 'px';
+    noBtn.style.top = spot.y + 'px';
+
+    if (!counts) return;
+    if (navigator.vibrate) navigator.vibrate(12);
+    if (dodgeCount % 2 === 0 && yesScale < 1.5) {
+      yesScale += 0.08;
+      yesBtn.style.setProperty('--yes-scale', yesScale);
+    }
+    if (dodgeCount >= SURRENDER_AT) {
+      showCaption('fine. "busy" gave up.');
+      setTimeout(surrender, 600);
+      return;
+    }
+    showCaption(CAPTIONS[captionIdx++ % CAPTIONS.length]);
+  }
+
+  function surrender() {
+    surrendered = true;
+    noBtn.textContent = "ok fine, I'm in 🤝";
+    noBtn.style.transform = 'scale(1)';
+    noBtn.classList.add('surrendered');
+    maybeBtn.hidden = false;
+    $('buttonRow').classList.add('has-maybe');
+    positionCaption();
+    const w = noBtn.offsetWidth, h = noBtn.offsetHeight;
+    const cx = parseFloat(noBtn.style.left), cy = parseFloat(noBtn.style.top);
+    const off = cx + w > window.innerWidth - 16 || cy + h > window.innerHeight - 16;
+    if (off || overlapsZone(cx, cy, w, h, getSafeZones())) {
+      const spot = findSpot(w, h);
+      noBtn.style.left = spot.x + 'px';
+      noBtn.style.top = spot.y + 'px';
+    }
+  }
+
+  noBtn.addEventListener('mouseenter', e => dodge(e.clientX, e.clientY));
+  noBtn.addEventListener('touchstart', e => {
+    if (surrendered) return;
+    e.preventDefault();
+    dodge(e.touches[0].clientX, e.touches[0].clientY);
+  }, { passive: false });
+  noBtn.addEventListener('click', e => {
+    e.preventDefault();
+    if (surrendered) return sayYes(noBtn, 'no');
+    dodge(e.clientX, e.clientY);
+  });
+  document.addEventListener('mousemove', e => {
+    if (surrendered || !noBtn.classList.contains('fixed')) return;
+    const r = noBtn.getBoundingClientRect();
+    if (Math.hypot(e.clientX - (r.left + r.width / 2), e.clientY - (r.top + r.height / 2)) < 70) dodge(e.clientX, e.clientY);
+  });
+
+  yesBtn.addEventListener('click', () => sayYes(yesBtn, 'yes'));
+  maybeBtn.addEventListener('click', () => sayYes(maybeBtn, 'maybe'));
+
+  function sayYes(btn, via) {
+    const r = btn.getBoundingClientRect();
+    emojiBurst(r.left + r.width / 2, r.top + r.height / 2, ['🙌', '🔥', '🤝', '⚡']);
+    // ✏️ screen 2 tag line, depending on how it went
+    const tag = $('burstTag');
+    if (via === 'maybe') tag.textContent = 'Maybe means yes. Group chat rules.';
+    else if (via === 'no') tag.textContent = "Even 'busy' wanted in. Respect.";
+    else if (dodgeCount === 0) tag.textContent = "No hesitation. That's why you're the GOAT.";
+    setTimeout(() => {
+      $('stage').style.display = 'none';
+      noBtn.style.display = 'none';
+      caption.classList.remove('visible');
+      show('burst');
+      launchConfetti(90);
+    }, reduceMotion ? 0 : 350);
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     SCREENS 2–4 — category → submenu
+     ═══════════════════════════════════════════════════════════════ */
+
+  $('continueBtn').addEventListener('click', () => show('category'));
+
+  const lanes = $('lanes');
+  Object.keys(PLANS).forEach(key => {
+    const p = PLANS[key];
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'lane';
+    b.innerHTML = `<span class="emoji"></span><span><b></b><small></small></span><span class="arrow">→</span>`;
+    b.querySelector('.emoji').textContent = p.emoji;
+    b.querySelector('b').textContent = p.label;
+    b.querySelector('small').textContent = p.blurb;
+    b.addEventListener('click', () => {
+      lanes.querySelectorAll('.lane').forEach(l => l.classList.toggle('selected', l === b));
+      setTimeout(() => openSub(key), 220);
+    });
+    lanes.appendChild(b);
+  });
+
+  function openSub(key) {
+    state.cat = key;
+    const p = PLANS[key];
+    $('subEyebrow').textContent = p.label.toLowerCase() + ' ' + p.emoji;
+    $('subTitle').textContent = p.title;
+    $('customWrap').classList.remove('show');
+    $('customInput').value = '';
+
+    const grid = $('subGrid');
+    grid.innerHTML = '';
+    p.items.concat([['Custom', '✨', true]]).forEach(([label, emoji, isCustom]) => {
+      const c = document.createElement('button');
+      c.type = 'button';
+      c.className = 'card';
+      c.innerHTML = '<span class="emoji"></span><span class="lbl"></span>';
+      c.querySelector('.emoji').textContent = emoji;
+      c.querySelector('.lbl').textContent = label;
+      c.addEventListener('click', () => {
+        grid.querySelectorAll('.card').forEach(x => x.classList.toggle('selected', x === c));
+        if (isCustom) {
+          $('customWrap').classList.add('show');
+          $('customInput').focus();
+          return;
+        }
+        $('customWrap').classList.remove('show');
+        setTimeout(() => pickActivity(key, label, emoji), 300);
+      });
+      grid.appendChild(c);
+    });
+    show('sub');
+  }
+
+  $('customConfirm').addEventListener('click', () => {
+    const text = $('customInput').value.trim();
+    if (!text) return $('customInput').focus();
+    pickActivity(state.cat, text, PLANS[state.cat].emoji);
+  });
+  $('customInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('customConfirm').click(); });
+
+  /* ═══════════════════════════════════════════════════════════════
+     SCREEN 5 — energy + stakes
+     ═══════════════════════════════════════════════════════════════ */
+
+  let cameFromWheel = false;
+
+  function pickActivity(cat, label, emoji, viaWheel) {
+    state.cat = cat;
+    state.activity = { label, emoji, viaWheel: !!viaWheel };
+    cameFromWheel = !!viaWheel;
+    updateStakesText();
+    show('energy');
+  }
+
+  $('backFromEnergy').addEventListener('click', () => show(cameFromWheel ? 'category' : 'sub'));
+
+  $('energyRange').addEventListener('input', () => {
+    state.energy = ENERGY[+$('energyRange').value];
+    $('energyEmoji').textContent = state.energy.emoji;
+    $('energyLabel').textContent = state.energy.label;
+    $('energyEmoji').classList.remove('pop');
+    void $('energyEmoji').offsetWidth;
+    $('energyEmoji').classList.add('pop');
+    if (navigator.vibrate) navigator.vibrate(8);
+  });
+
+  function updateStakesText() {
+    state.stakes = $('stakesToggle').checked;
+    $('stakesText').textContent = state.stakes
+      ? PLANS[state.cat].stakes
+      : 'no stakes (boring, but okay)';   // ✏️
+  }
+  $('stakesToggle').addEventListener('change', updateStakesText);
+
+  $('energyGo').addEventListener('click', () => {
+    show('bookTime');
+    initBookingWidget();
+  });
+
+  /* ═══════════════════════════════════════════════════════════════
+     SCREEN 6 — booking widget
+     ═══════════════════════════════════════════════════════════════ */
+
+  function planLine() {
+    const a = state.activity;
+    return `${a.label} ${a.emoji}${a.viaWheel ? " (wheel's pick)" : ''}`;
+  }
+
+  function initBookingWidget() {
+    const p = PLANS[state.cat];
+    const a = state.activity;
+    $('booking').innerHTML = '';
+
+    // calendar title, e.g. "Drinks: Beer garden · competitive · with Tom"
+    const title = `${p.label}: ${a.label} · ${state.energy.short}` + (friendName ? ` · with ${friendName}` : '');
+
+    BookingWidget.init({
+      el: '#booking',
+      endpoint: 'https://script.google.com/macros/s/AKfycby4fXDrxwlTkwqEcsvTE7z5HkMs7_-vgbRARlE_PRHtC57Gl4Ze4d8_LZDHLFKhzB7i/exec',
+      lang: 'en',
+      accent: '#1c1b19',
+      forceService: { id: p.service, name: title, duration: p.duration }, // keep in sync with Code.gs
+      onBooked: onBooked,
+
+      // no ?name= in the link → ask for it in the form
+      fields: friendName ? ['email', 'note'] : ['name', 'email', 'note'],
+
+      extra: () => ({
+        friend: friendName || '',
+        plan: planLine(),
+        energy: state.energy.label,
+        stakes: state.stakes ? p.stakes : 'none'
+      }),
+
+      consent: { required: true },
+
+      // ✏️ all booking-form wording for this page
+      text: {
+        chooseTime: 'Squad pass, all access',
+        yourDetails: 'Last step, no flaking',
+        name: 'What do your friends call you?',
+        email: 'Your email. The calendar invite lands here, so "I forgot" doesn\'t count',
+        emailPlaceholder: 'you@legend.com',
+        note: 'Bringing a +1? Any requests? (optional)',
+        notePlaceholder: "e.g. I'm bringing the speaker",
+        book: "I'm in, lock it 🔒",
+        booking: 'Locking it in…',
+        required: friendName ? 'Need a real email so the calendar can nag you' : 'Name + a real email, please',
+        errTaken: 'Someone grabbed that slot, pick another one',
+        errGeneric: "That didn't go through, try again?",
+        loading: 'checking the squad calendar…',
+        noSlots: 'Nothing free that day. Try another one?',
+        consent: "I won't cancel last minute. (Real emergencies only. A nap is not an emergency.)",
+        consentRequired: 'The no-flaking clause is non-negotiable 🤝'
+      }
+    });
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     SCREEN 7 — countdown + squad pass
+     ═══════════════════════════════════════════════════════════════ */
+
+  function onBooked(details) {
+    if (!friendName && details.name) friendName = details.name;
+    fillPass(formatWhen(details.date, details.time));
+    show('finalMsg');
+    startCountdown(details.date, details.time);
+    setupShake();
+    setTimeout(() => launchConfetti(60), 250);
+  }
+
+  function formatWhen(iso, time) {
+    if (!iso) return 'TBA';
+    const d = new Date(iso + 'T12:00:00');
+    return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) + (time ? ' at ' + time : '');
+  }
+
+  function fillPass(when) {
+    $('psWho').textContent = friendName || 'you';
+    $('psPlan').textContent = planLine();
+    $('psEnergy').textContent = state.energy.label;
+    $('psStakes').textContent = state.stakes ? PLANS[state.cat].stakes : 'none (boring)';
+    $('psWhen').textContent = when;
+    $('psGate').textContent = GATES[Math.floor(Math.random() * GATES.length)];
+
+    const bc = $('psBarcode');
+    bc.innerHTML = '';
+    for (let y = 0; y < 96;) {
+      const h = [1, 1, 2, 3][Math.floor(Math.random() * 4)];
+      if (Math.random() > 0.35) {
+        const r = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        r.setAttribute('x', 0); r.setAttribute('y', y);
+        r.setAttribute('width', 56); r.setAttribute('height', h);
+        r.setAttribute('fill', '#1c1b19');
+        bc.appendChild(r);
+      }
+      y += h + 1;
+    }
+  }
+
+  let countdownTimer = null;
+  function startCountdown(iso, time) {
+    const box = $('countdown');
+    clearInterval(countdownTimer);
+    const target = iso && time ? new Date(`${iso}T${time}:00`) : null;
+    if (!target || isNaN(target)) { box.hidden = true; return; }
+    const pad = n => String(n).padStart(2, '0');
+    function tick() {
+      let s = Math.max(0, Math.floor((target - Date.now()) / 1000));
+      if (!s) { clearInterval(countdownTimer); box.hidden = true; $('finalTitle').textContent = "It's go time 🔥"; return; }
+      const d = Math.floor(s / 86400); s -= d * 86400;
+      const h = Math.floor(s / 3600); s -= h * 3600;
+      const m = Math.floor(s / 60);
+      $('cdD').textContent = d; $('cdH').textContent = pad(h);
+      $('cdM').textContent = pad(m); $('cdS').textContent = pad(s - m * 60);
+    }
+    box.hidden = false;
+    tick();
+    countdownTimer = setInterval(tick, 1000);
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     WHEEL — 8 random activities across all three categories
+     (3 + 3 + 2, shuffled), rebuilt every time it's opened fresh
+     ═══════════════════════════════════════════════════════════════ */
+
+  const MAX_SPINS = 3;
+  const wheelSvg = $('wheel'), spinBtn = $('spinBtn'), wheelResult = $('wheelResult');
+  const wheelActions = $('wheelActions'), wheelRespin = $('wheelRespin');
+  const wheelColors = [['#fcba01', '#1c1b19'], ['#2a2825', '#fff8e6'], ['#fff8e6', '#1c1b19'], ['#3a3732', '#fcba01']];
+  let wheelItems = [], SEG = 45, wheelRot = 0, spinning = false, spinCount = 0, wheelPick = null;
+
+  const shuffle = arr => arr.map(v => [Math.random(), v]).sort((a, b) => a[0] - b[0]).map(x => x[1]);
+
+  function buildWheel() {
+    const counts = shuffle([3, 3, 2]);
+    wheelItems = shuffle(Object.keys(PLANS).flatMap((cat, i) =>
+      shuffle(PLANS[cat].items).slice(0, counts[i]).map(([label, emoji]) => ({ cat, label, emoji }))));
+    SEG = 360 / wheelItems.length;
+
+    const NS = 'http://www.w3.org/2000/svg', R = 140;
+    const mk = (tag, attrs, text) => {
+      const n = document.createElementNS(NS, tag);
+      for (const k in attrs) n.setAttribute(k, attrs[k]);
+      if (text != null) n.textContent = text;
+      return n;
+    };
+    const rad = d => (d - 90) * Math.PI / 180;
+
+    wheelSvg.innerHTML = '';
+    wheelSvg.appendChild(mk('circle', { r: 148, fill: '#1c1b19', stroke: '#fcba01', 'stroke-width': 4 }));
+    wheelItems.forEach((it, i) => {
+      const [bg, fg] = wheelColors[i % wheelColors.length];
+      const a0 = rad(i * SEG - SEG / 2), a1 = rad(i * SEG + SEG / 2);
+      wheelSvg.appendChild(mk('path', {
+        d: `M0 0 L${R * Math.cos(a0)} ${R * Math.sin(a0)} A${R} ${R} 0 0 1 ${R * Math.cos(a1)} ${R * Math.sin(a1)} Z`,
+        fill: bg
+      }));
+      const g = mk('g', { transform: `rotate(${i * SEG})` });
+      g.appendChild(mk('text', { y: -118, 'text-anchor': 'middle', 'dominant-baseline': 'central', 'font-size': 20 }, it.emoji));
+      // label runs along the radius, so longer names still fit
+      g.appendChild(mk('text', {
+        transform: 'rotate(-90)', x: 70, y: 0, 'text-anchor': 'middle', 'dominant-baseline': 'central',
+        fill: fg, 'font-size': 12, 'font-weight': 800, 'font-family': 'Avenir Next, Helvetica Neue, Arial, sans-serif'
+      }, it.label));
+      wheelSvg.appendChild(g);
+      const pa = rad(i * SEG + SEG / 2);
+      wheelSvg.appendChild(mk('circle', { cx: 144 * Math.cos(pa), cy: 144 * Math.sin(pa), r: 3.2, fill: '#fcba01' }));
+    });
+  }
+
+  let audioCtx = null;
+  function blip() {
+    try {
+      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      const t = audioCtx.currentTime, o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.type = 'square';
+      o.frequency.value = 1200;
+      g.gain.setValueAtTime(0.03, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.035);
+      o.connect(g); g.connect(audioCtx.destination);
+      o.start(t); o.stop(t + 0.04);
+    } catch (e) {}
+  }
+
+  function currentAngle() {
+    const m = getComputedStyle(wheelSvg).transform.match(/matrix\(([^)]+)\)/);
+    if (!m) return 0;
+    const [a, b] = m[1].split(',').map(Number);
+    return Math.atan2(b, a) * 180 / Math.PI;
+  }
+
+  function trackTicks() {
+    let last = null;
+    (function frame() {
+      if (!spinning) return;
+      const seg = Math.floor(((currentAngle() + SEG / 2) % 360 + 360) % 360 / SEG);
+      if (last !== null && seg !== last) {
+        blip();
+        if ($('wheelPointer').animate) $('wheelPointer').animate(
+          [{ transform: 'rotate(0)' }, { transform: 'rotate(-22deg)' }, { transform: 'rotate(0)' }], { duration: 110 });
+      }
+      last = seg;
+      requestAnimationFrame(frame);
+    })();
+  }
+
+  function spin() {
+    if (spinning || spinCount >= MAX_SPINS) return;
+    spinning = true;
+    spinCount++;
+    spinBtn.disabled = true;
+    wheelActions.hidden = true;
+    wheelResult.textContent = '';
+    wheelResult.classList.remove('pop');
+    if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+
+    const i = Math.floor(Math.random() * wheelItems.length);
+    const target = -(i * SEG) + (Math.random() - 0.5) * SEG * 0.7;
+    const duration = reduceMotion ? 0.6 : 4.8;
+    wheelRot += (reduceMotion ? 360 : 2160) + ((((target - wheelRot) % 360) + 360) % 360);
+    wheelSvg.style.transition = `transform ${duration}s cubic-bezier(.12, .7, .14, 1)`;
+    wheelSvg.style.transform = `rotate(${wheelRot}deg)`;
+    trackTicks();
+    setTimeout(() => landed(wheelItems[i]), duration * 1000 + 100);
+  }
+
+  function landed(it) {
+    spinning = false;
+    wheelPick = it;
+    // ✏️ wheel verdicts
+    const verdicts = [`The wheel says: ${it.label} ${it.emoji}`, `Second opinion: ${it.label} ${it.emoji}`,
+                      `Final answer: ${it.label} ${it.emoji}. The wheel is done with you.`];
+    wheelResult.textContent = verdicts[Math.min(spinCount, 3) - 1];
+    void wheelResult.offsetWidth;
+    wheelResult.classList.add('pop');
+    if (spinCount < MAX_SPINS) {
+      wheelRespin.hidden = false;
+      wheelRespin.textContent = spinCount === 1 ? 'nah, spin again' : 'one last time, promise';
+      spinBtn.disabled = false;
+    } else {
+      wheelRespin.hidden = true;
+      spinBtn.textContent = 'DONE';
+    }
+    wheelActions.hidden = false;
+    const r = wheelResult.getBoundingClientRect();
+    emojiBurst(r.left + r.width / 2, r.top + r.height / 2, [it.emoji, '⚡', '🔥']);
+    if (navigator.vibrate) navigator.vibrate([20, 40, 20]);
+  }
+
+  $('openWheel').addEventListener('click', () => {
+    if (!wheelItems.length) buildWheel();
+    $('wheelOverlay').hidden = false;
+    setTimeout(() => spinBtn.focus(), 50);
+  });
+  function closeWheel() { if (!spinning) $('wheelOverlay').hidden = true; }
+  $('closeWheel').addEventListener('click', closeWheel);
+  $('wheelOverlay').addEventListener('click', e => { if (e.target === $('wheelOverlay')) closeWheel(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeWheel(); });
+  spinBtn.addEventListener('click', spin);
+  wheelRespin.addEventListener('click', spin);
+  $('wheelAccept').addEventListener('click', () => {
+    if (!wheelPick) return;
+    $('wheelOverlay').hidden = true;
+    pickActivity(wheelPick.cat, wheelPick.label, wheelPick.emoji, true);
+  });
+
+  /* ═══════════════════════════════════════════════════════════════
+     EFFECTS + EASTER EGGS
+       - shake the phone on the last screen → confetti
+       - tap a sticker 5× quickly → it does a spin
+     ═══════════════════════════════════════════════════════════════ */
+
+  function emojiBurst(x, y, set) {
+    if (reduceMotion) return;
+    for (let i = 0; i < 16; i++) {
+      const e = document.createElement('div');
+      e.className = 'pop-emoji';
+      e.textContent = set[i % set.length];
+      const ang = (Math.PI * 2 * i) / 16 + Math.random() * 0.3, dist = 90 + Math.random() * 90;
+      e.style.left = x + 'px';
+      e.style.top = y + 'px';
+      e.style.setProperty('--dx', Math.cos(ang) * dist + 'px');
+      e.style.setProperty('--dy', Math.sin(ang) * dist + 'px');
+      e.style.setProperty('--rot', (Math.random() * 60 - 30) + 'deg');
+      e.style.fontSize = (16 + Math.random() * 14) + 'px';
+      document.body.appendChild(e);
+      setTimeout(() => e.remove(), 1200);
+    }
+  }
+
+  function launchConfetti(count) {
+    if (reduceMotion) return;
+    const colors = ['#fcba01', '#ffd65c', '#fff8e6', '#b98700'];
+    for (let i = 0; i < count; i++) {
+      const p = document.createElement('div');
+      p.className = 'confetti-piece';
+      if (Math.random() < 0.15) {
+        p.textContent = ['⚡', '🔥', '🍻', '⚽'][Math.floor(Math.random() * 4)];
+        p.style.fontSize = (12 + Math.random() * 10) + 'px';
+      } else {
+        const size = Math.random() * 8 + 5;
+        p.style.width = size + 'px';
+        p.style.height = (Math.random() < 0.3 ? size : size * 0.4) + 'px';
+        p.style.background = colors[Math.floor(Math.random() * colors.length)];
+        p.style.borderRadius = Math.random() < 0.3 ? '50%' : '2px';
+      }
+      p.style.left = Math.random() * 100 + 'vw';
+      p.style.setProperty('--drift', (Math.random() * 160 - 80) + 'px');
+      p.style.setProperty('--spin', (Math.random() * 900 - 450) + 'deg');
+      p.style.animationDuration = (Math.random() * 2 + 2.5) + 's';
+      p.style.animationDelay = (Math.random() * 0.6) + 's';
+      document.body.appendChild(p);
+      setTimeout(() => p.remove(), 5000);
+    }
+  }
+
+  function celebrate() {
+    launchConfetti(70);
+    emojiBurst(window.innerWidth / 2, window.innerHeight / 2, ['🙌', '🔥', '🤝', '⚡']);
+    if (navigator.vibrate) navigator.vibrate([30, 50, 30]);
+  }
+
+  const shakeHint = $('shakeHint');
+  const needsMotionPermission = typeof DeviceMotionEvent !== 'undefined' &&
+                                typeof DeviceMotionEvent.requestPermission === 'function';
+  const isTouch = window.matchMedia('(pointer: coarse)').matches;
+  let shakeOn = false, lastAcc = null, lastShake = 0;
+
+  function onMotion(e) {
+    const a = e.accelerationIncludingGravity;
+    if (!a || a.x == null) return;
+    if (lastAcc) {
+      const d = Math.abs(a.x - lastAcc.x) + Math.abs(a.y - lastAcc.y) + Math.abs(a.z - lastAcc.z);
+      if (d > 28 && Date.now() - lastShake > 1200 && $('finalMsg').classList.contains('show')) {
+        lastShake = Date.now();
+        celebrate();
+      }
+    }
+    lastAcc = { x: a.x, y: a.y, z: a.z };
+  }
+
+  function enableShake() {
+    if (shakeOn) return;
+    if (needsMotionPermission) {
+      DeviceMotionEvent.requestPermission().then(s => {
+        if (s === 'granted') {
+          window.addEventListener('devicemotion', onMotion);
+          shakeOn = true;
+          shakeHint.textContent = SHAKE_TEXTS.ready;
+        }
+      }).catch(() => {});
+    } else if ('DeviceMotionEvent' in window) {
+      window.addEventListener('devicemotion', onMotion);
+      shakeOn = true;
+    }
+  }
+
+  function setupShake() {
+    if (!isTouch) shakeHint.textContent = SHAKE_TEXTS.desktop;
+    else if (needsMotionPermission) shakeHint.textContent = SHAKE_TEXTS.iphone;
+    else { shakeHint.textContent = SHAKE_TEXTS.android; enableShake(); }
+  }
+
+  shakeHint.addEventListener('click', () => { enableShake(); celebrate(); });
+
+  document.querySelectorAll('.sticker').forEach(st => {
+    let taps = 0, timer = null;
+    st.addEventListener('click', () => {
+      taps++;
+      clearTimeout(timer);
+      timer = setTimeout(() => { taps = 0; }, 1500);
+      if (taps < 5) return;
+      taps = 0;
+      st.classList.remove('party');
+      void st.offsetWidth;
+      st.classList.add('party');
+      const r = st.getBoundingClientRect();
+      emojiBurst(r.left + r.width / 2, r.top + r.height / 2, ['🔥', '⚡']);
+    });
+  });
+
+  window.addEventListener('resize', () => {
+    if (noBtn.classList.contains('fixed')) {
+      const r = noBtn.getBoundingClientRect();
+      noBtn.style.left = Math.min(r.left, Math.max(16, window.innerWidth - r.width - 16)) + 'px';
+      noBtn.style.top = Math.min(r.top, Math.max(16, window.innerHeight - r.height - 16)) + 'px';
+    }
+    positionCaption();
+  });
+})();
+</script>
+
+</body>
+</html>
