@@ -881,7 +881,7 @@
   <div class="buttons" id="buttonRow">
     <button id="yes">I'm in</button>
     <button id="no">busy</button>
-    <button id="maybe" hidden>maybe (also yes)</button>
+    <button id="maybe" hidden>maybe (= yes)</button>
   </div>
 </div>
 
@@ -1046,7 +1046,7 @@ const Ink = (() => {
       const cols = Math.max(4, Math.round(w / 26));
       for (let i = 0; i < cols; i++) {
         const cw = w / cols * (1.25 + r() * 0.4);
-        shapes.push({ k: 'drip', x: (i + 0.5) * w / cols, cw, a: r() * 0.3, len: 0.5 + r() * 0.25, H: h + cw });
+        shapes.push({ k: 'drip', x: (i + 0.5) * w / cols, cw, a: r() * 0.3, len: 0.5 + r() * 0.25, H: h + cw, h });
       }
     }
     return shapes;
@@ -1058,8 +1058,9 @@ const Ink = (() => {
       const L = s.W * t, x0 = s.dir > 0 ? -s.rad : (s.W - s.rad) - L, tipX = s.dir > 0 ? x0 + L : x0;
       return (x >= x0 && x <= x0 + L && Math.abs(y - s.y) <= s.rad) || Math.hypot(x - tipX, y - s.y) <= s.rad;
     }
-    const L = s.H * t, half = s.cw / 2, end = Math.max(0, L - half);
-    return (Math.abs(x - s.x) <= half && y <= end) || Math.hypot(x - s.x, y - end) <= half;
+    // 'drip' rises from the bottom (like a glass filling up), rounded top
+    const L = s.H * t, half = s.cw / 2, end = Math.max(0, L - half), top = s.h - end;
+    return (Math.abs(x - s.x) <= half && y >= top) || Math.hypot(x - s.x, y - top) <= half;
   }
 
   function buildLUT(shapes, w, h) {
@@ -1099,9 +1100,9 @@ const Ink = (() => {
         layers.push(`linear-gradient(#000, #000) ${f(x0)}px ${f(s.y - s.rad)}px / ${f(L)}px ${f(2 * s.rad)}px no-repeat`);
         layers.push(`radial-gradient(circle at ${f(tipX)}px ${f(s.y)}px, #000 ${f(s.rad)}px, transparent ${f(s.rad + 0.8)}px)`);
       } else {
-        const half = s.cw / 2, end = Math.max(0, s.H * t - half);
-        layers.push(`linear-gradient(#000, #000) ${f(s.x - half)}px 0 / ${f(s.cw)}px ${f(end)}px no-repeat`);
-        layers.push(`radial-gradient(circle at ${f(s.x)}px ${f(end)}px, #000 ${f(half)}px, transparent ${f(half + 0.8)}px)`);
+        const half = s.cw / 2, end = Math.max(0, s.H * t - half), top = s.h - end;
+        layers.push(`linear-gradient(#000, #000) ${f(s.x - half)}px ${f(top)}px / ${f(s.cw)}px ${f(end + 1)}px no-repeat`);
+        layers.push(`radial-gradient(circle at ${f(s.x)}px ${f(top)}px, #000 ${f(half)}px, transparent ${f(half + 0.8)}px)`);
       }
     }
     return layers.length ? layers.join(',') : HIDDEN;
