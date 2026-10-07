@@ -10,9 +10,20 @@
 <meta property="og:description" content="you free this week? two buttons, one correct answer.">
 <meta name="description" content="you free this week? two buttons, one correct answer.">
 <meta name="theme-color" content="#1c1b19">
+<!-- Bungee is self-hosted (bungee.woff2 in this repo, license: OFL-Bungee.txt),
+     so no visitor data goes to Google Fonts -->
+<link rel="preload" href="bungee.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤙</text></svg>">
 
 <style>
+  @font-face {
+    font-family: 'Bungee';
+    src: url('bungee.woff2') format('woff2');
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+  }
+
   /* ═══════════════════════════════════════════════════════════════
      FRIENDS INVITE — standalone page (own repo, own Code.gs).
      Click-Capybara colors.
@@ -866,6 +877,21 @@
     .confetti-piece, .pop-emoji { display: none; }
     #no.fixed { transition: left 0.2s ease, top 0.2s ease; }
   }
+
+  /* ═══ Bungee for headlines + big numbers (same style as the climbing page) ═══ */
+  :root { --display: 'Bungee', 'Avenir Next', 'Helvetica Neue', Arial, sans-serif; }
+  h1, .screen h2, .wheel-card h2, #bookingMount .cbw h3, .countdown b, .pass-title, .wheel-hub {
+    font-family: var(--display);
+    font-weight: 400;          /* Bungee only has one weight */
+    letter-spacing: 0;         /* it's wide already */
+  }
+  h1 { font-size: clamp(28px, 8vw, 52px); line-height: 1.12; }   /* long names still shrink to fit */
+  .screen h2 { font-size: clamp(24px, 6.8vw, 38px); line-height: 1.12; }
+  .wheel-card h2 { font-size: clamp(22px, 6vw, 30px); }
+  #bookingMount .cbw h3 { font-size: 19px; }
+  .countdown b { font-size: clamp(32px, 9.5vw, 52px); }
+  .pass-title { font-size: 18px; line-height: 1.2; }
+  .wheel-hub { font-size: 14px; }
 </style>
 </head>
 <body>
