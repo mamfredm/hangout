@@ -646,6 +646,11 @@
 
   #bookingMount .cbw-grid button:disabled { color: rgba(28, 27, 25, 0.28); }
 
+  /* busy days / taken times: visible, but clearly crossed out */
+  #bookingMount .cbw-grid button.full:disabled { color: rgba(28, 27, 25, 0.5); }
+  #bookingMount .cbw-slots button.taken { opacity: 0.45; }
+  #bookingMount .cbw-legend { color: rgba(28, 27, 25, 0.7); font-weight: 600; }
+
   #bookingMount .cbw-slots button:hover,
   #bookingMount .cbw-btn:not(.pri):hover { border-color: var(--char); }
 
@@ -1222,7 +1227,7 @@ const Ink = (() => {
   // ✏️ the /exec URL of THIS repo's Code.gs deployment (Apps Script → Deploy).
   //    Until it's set, the page runs in 'mock' mode: fake times, nothing gets
   //    booked for real — handy for testing the look.
-  const ENDPOINT = 'https://script.google.com/macros/s/AKfycbyIGlynSgWdDX5TsM5aEDZmwZtV00hijezjA_rv6bj1CzW1ZfcRbAu_WRZ9YTtBTOg-/exec';
+  const ENDPOINT = 'PASTE_YOUR_APPS_SCRIPT_EXEC_URL_HERE';
 
   const PLANS = {
     food: {
@@ -1663,6 +1668,9 @@ const Ink = (() => {
 
       consent: { required: true },
 
+      // ✏️ loading animation inside the pass (word on the tilting ticket)
+      loader: { word: 'LOADING', slotsWord: 'CHECKING', font: "'Bungee', sans-serif" },
+
       // ✏️ all booking-form wording for this page
       text: {
         chooseTime: 'Squad pass, all access',
@@ -1679,6 +1687,7 @@ const Ink = (() => {
         errGeneric: "That didn't go through, try again?",
         loading: 'checking the squad calendar…',
         noSlots: 'Nothing free that day. Try another one?',
+        busyHint: 'crossed out = already booked, sorry',
         consent: "I won't cancel last minute. (Real emergencies only. A nap is not an emergency.)",
         consentRequired: 'The no-flaking clause is non-negotiable 🤝'
       }

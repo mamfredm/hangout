@@ -111,7 +111,8 @@
       weekdays: ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'],
       months: ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli',
                'August', 'September', 'Oktober', 'November', 'Dezember'],
-      at: 'um', oclock: 'Uhr'
+      at: 'um', oclock: 'Uhr',
+      busyHint: 'Durchgestrichen = da bin ich schon verplant.'
     },
     en: {
       chooseService: 'What would you like to book?',
@@ -139,7 +140,8 @@
       weekdays: ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'],
       months: ['January', 'February', 'March', 'April', 'May', 'June', 'July',
                'August', 'September', 'October', 'November', 'December'],
-      at: 'at', oclock: ''
+      at: 'at', oclock: '',
+      busyHint: 'Crossed out = already booked.'
     }
   };
 
@@ -196,6 +198,12 @@
   '.cbw-btn.pri{background:var(--cbw-accent);border-color:var(--cbw-accent)}' +
   '.cbw-btn:disabled{opacity:.55;cursor:default}' +
   '.cbw-err{color:#c0392b;font-size:13px;margin-top:10px}' +
+  '.cbw-grid button.full{text-decoration:line-through;text-decoration-thickness:1.5px}' +
+  '.cbw-slots button.taken,.cbw-slots button.taken:hover{text-decoration:line-through;text-decoration-thickness:1.5px;' +
+    'opacity:.38;cursor:default;border-color:var(--cbw-line)}' +
+  '.cbw-loader{transition:opacity .2s ease}.cbw-loader.out{opacity:0}' +
+  '.cbw-loader canvas{display:block;width:100%}' +
+  '.cbw-legend{color:var(--cbw-mut);font-size:12px;margin:-6px 2px 12px}' +
   '.cbw label.cbw-consent{display:flex;gap:10px;align-items:flex-start;margin:16px 0 0;' +
     'font-size:13px;line-height:1.45;color:var(--cbw-ink);cursor:pointer}' +
   '.cbw .cbw-consent input{width:18px;height:18px;flex:none;margin:1px 0 0;padding:0;accent-color:var(--cbw-accent)}' +
@@ -258,6 +266,17 @@
     minNoticeHours: 12
   };
 
+  // pseudo-random availability per date, just for the demo:
+  // some times taken, roughly every 7th day fully booked
+  function mockDay(m, date) {
+    var seed = date.split('-').join('') % 7;
+    if (seed === 3) return { slots: [], taken: m.slotTimes.slice() };
+    return {
+      slots: m.slotTimes.filter(function (_, i) { return (i + seed) % 3 !== 0; }),
+      taken: m.slotTimes.filter(function (_, i) { return (i + seed) % 3 === 0; })
+    };
+  }
+
   // ---- mock API implementation (only used when endpoint === 'mock') ----
   function mockApi(action, params, overrides) {
     var m = {
@@ -279,13 +298,160 @@
           var day = new Date(params.date + 'T12:00:00').getDay();
           if (!(m.hours[day] || []).length) return res({ slots: [] }); // closed that day
           // pseudo-random availability per date, just for the demo
-          var seed = params.date.split('-').join('') % 7;
-          res({ slots: m.slotTimes.filter(function (_, i) { return (i + seed) % 3 !== 0; }) });
+          res(mockDay(m, params.date));
+        } else if (action === 'days') {
+          // fully booked days in the bookable window
+          var full = [], d0 = new Date(); d0.setHours(12, 0, 0, 0);
+          for (var k = 0; k <= m.maxAdvanceDays; k++) {
+            var dd = new Date(d0.getTime() + k * 864e5);
+            var key = dd.getFullYear() + '-' + ('0' + (dd.getMonth() + 1)).slice(-2) + '-' + ('0' + dd.getDate()).slice(-2);
+            if ((m.hours[dd.getDay()] || []).length && !mockDay(m, key).slots.length) full.push(key);
+          }
+          res({ full: full });
         } else {
           res({ ok: true });
         }
       }, 350);
     });
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     3b. LOADER — a tilting, extruded "ticket" with pulsing letters and
+        a block progress bar, drawn on a canvas inside the widget.
+        Colors come from the widget itself (text color = ink, card
+        background = face), so it matches any theme automatically.
+        loader(container, { word, font, height, grid }) → { stop(cb) }
+     ═══════════════════════════════════════════════════════════════ */
+  function loader(container, o) {
+    o = o || {};
+    var MAX_SKEW_DEG = 7, SWING_SECONDS = 2.4, GLITCH = 0.12;
+    var word = String(o.word || 'LOADING').toUpperCase();
+    var H = o.height || 230;
+    var wrap = el('div', 'cbw-loader');
+    wrap.setAttribute('role', 'status');
+    wrap.setAttribute('aria-label', o.label || word);
+    var canvas = document.createElement('canvas');
+    canvas.style.height = H + 'px';
+    wrap.appendChild(canvas);
+    container.appendChild(wrap);
+    var ctx = canvas.getContext('2d');
+    var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var last = performance.now(), time = 0, raf = 0, stopped = false;
+
+    // colors: ink = widget text color, face = first non-transparent background up the tree
+    function faceColor(n) {
+      for (; n && n.nodeType === 1; n = n.parentNode) {
+        var b = getComputedStyle(n).backgroundColor;
+        if (b && b !== 'transparent' && !/rgba\(.*,\s*0\)$/.test(b)) return b;
+      }
+      return '#fff';
+    }
+    var ink = null, face = null;
+    function resolveColors() {   // the container may not be in the page yet on the first call
+      if (ink || !wrap.isConnected) return;
+      ink = getComputedStyle(wrap).color || '#000';
+      face = faceColor(wrap);
+    }
+
+    function draw(t) {
+      resolveColors();
+      if (!ink) return;
+      var w = wrap.clientWidth || 300, h = H, dpr = Math.min(window.devicePixelRatio || 1, 2);
+      if (canvas.width !== Math.floor(w * dpr) || canvas.height !== Math.floor(h * dpr)) {
+        canvas.width = Math.floor(w * dpr); canvas.height = Math.floor(h * dpr);
+      }
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, w, h);
+
+      if (o.grid !== false) {                        // faint graph-paper grid
+        ctx.strokeStyle = ink; ctx.globalAlpha = 0.08; ctx.lineWidth = 1;
+        for (var x = (w % 24) / 2; x < w; x += 24) { ctx.beginPath(); ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, h); ctx.stroke(); }
+        for (var y = (h % 24) / 2; y < h; y += 24) { ctx.beginPath(); ctx.moveTo(0, y + 0.5); ctx.lineTo(w, y + 0.5); ctx.stroke(); }
+        ctx.globalAlpha = 1;
+      }
+
+      var skew = (reduce ? 0 : MAX_SKEW_DEG * Math.sin(t * 2 * Math.PI / SWING_SECONDS)) * Math.PI / 180;
+      var pitch = reduce ? 0.12 : Math.sin(t * 1.5) * 0.08 + 0.15;
+      var depth = Math.round(Math.min(18, h * 0.08));
+      var boxW = Math.min(w - 2 * depth - 24, 360), boxH = Math.min(124, h - 2 * depth - 40);
+      var bx = -boxW / 2 - depth / 2, by = -boxH / 2 - depth / 2;
+
+      ctx.save();
+      ctx.translate(w / 2, h / 2);
+      ctx.transform(1, Math.tan(skew), 0, Math.cos(pitch), 0, 0);
+
+      // extrusion: solid back plate + stacked outlines
+      ctx.strokeStyle = ink; ctx.lineWidth = 1.5;
+      for (var d = depth; d > 0; d -= 3) {
+        ctx.beginPath(); ctx.rect(bx + d, by + d, boxW, boxH);
+        if (d === depth) { ctx.fillStyle = ink; ctx.fill(); }
+        ctx.stroke();
+      }
+      // front face, same color as the card it sits on
+      ctx.fillStyle = face; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.rect(bx, by, boxW, boxH); ctx.fill(); ctx.stroke();
+
+      // corner accents
+      ctx.fillStyle = ink;
+      [[bx - 3, by - 3], [bx + boxW - 7, by - 3], [bx - 3, by + boxH - 7], [bx + boxW - 7, by + boxH - 7]]
+        .forEach(function (p) { ctx.fillRect(p[0], p[1], 10, 10); });
+
+      // block progress bar
+      var barW = boxW - 40, barH = 14, barX = bx + 20, barY = by + boxH - 30;
+      ctx.lineWidth = 2; ctx.strokeRect(barX, barY, barW, barH);
+      var blocks = 14, active = reduce ? blocks - 1 : Math.floor(((t * 0.8) % 1) * blocks), bw = (barW - 6) / blocks;
+      for (var i = 0; i <= active; i++) ctx.fillRect(barX + 3 + i * bw, barY + 3, bw - 2, barH - 6);
+
+      // pulsing, letter-spaced word — font size shrinks to fit the face
+      var pulse = reduce ? 0.6 : (Math.sin(t * 3.5) + 1) / 2;
+      var maxSpacing = 18, spacing = 3 + pulse * (maxSpacing - 3);
+      var size = 30;
+      ctx.font = '900 ' + size + 'px ' + (o.font || 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace');
+      var plain = ctx.measureText(word).width + (word.length - 1) * maxSpacing;
+      if (plain > boxW - 36) {
+        size = Math.max(14, Math.floor(size * (boxW - 36) / plain));
+        ctx.font = '900 ' + size + 'px ' + (o.font || 'ui-monospace, monospace');
+      }
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      var widths = [], total = 0;
+      for (i = 0; i < word.length; i++) {
+        widths.push(ctx.measureText(word[i]).width);
+        total += widths[i] + (i < word.length - 1 ? spacing : 0);
+      }
+      var glitching = !reduce && Math.random() < GLITCH && Math.sin(t * 12) > 0.4;
+      if (glitching) {
+        ctx.globalAlpha = 0.15;
+        ctx.fillRect(bx, by + Math.random() * (boxH - 12), boxW, 12);
+        ctx.globalAlpha = 1;
+      }
+      var sx = bx + boxW / 2 - total / 2, ty = by + (boxH - 30) / 2 + 2;
+      ctx.globalAlpha = 0.4 + pulse * 0.6;
+      for (i = 0; i < word.length; i++) {
+        var cx = sx + widths[i] / 2, cy = ty;
+        if (glitching && Math.random() > 0.5) { cx += (Math.random() - 0.5) * 7; cy += (Math.random() - 0.5) * 5; }
+        ctx.fillText(word[i], cx, cy);
+        if (!reduce && i === Math.floor((t * 6) % word.length)) ctx.fillRect(cx - widths[i] / 2, cy + size * 0.58, widths[i], 3);
+        sx += widths[i] + spacing;
+      }
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    }
+
+    function frame(now) {
+      if (stopped) return;
+      if (!canvas.isConnected && ink) return;       // removed by a re-render → stop quietly
+      time += (now - last) / 1000; last = now;
+      draw(time);
+      raf = requestAnimationFrame(frame);
+    }
+    raf = requestAnimationFrame(frame);
+
+    return {
+      stop: function (cb) {
+        wrap.classList.add('out');
+        setTimeout(function () { stopped = true; cancelAnimationFrame(raf); if (cb) cb(); }, reduce ? 0 : 220);
+      }
+    };
   }
 
   /* ═══════════════════════════════════════════════════════════════
@@ -314,7 +480,7 @@
     var state = {
       remote: null, service: null, date: null, time: null,
       monthCursor: startOfMonth(new Date()), slots: null, loadingSlots: false,
-      pendingService: null
+      pendingService: null, taken: null, fullDays: {}, daysFor: null
     };
 
     // forceService: skip the "what would you like to book" step entirely and
@@ -324,6 +490,30 @@
     // bookable services. { id, name, duration }
     var forced = cfg.forceService || null;
     var totalSteps = forced ? 2 : 3;
+
+    // showBusy (default on): cross out fully booked days right in the month
+    // view and show taken times struck through instead of hiding them.
+    // Needs a backend that answers ?action=days; older backends are fine,
+    // the calendar then simply looks like before.
+    var showBusy = cfg.showBusy !== false;
+
+    // loader: false = plain text instead; or { word, slotsWord, font, minMs }
+    var lo = cfg.loader === false ? null : (cfg.loader || {});
+    function showLoader(container, word, height, grid) {
+      if (!lo) { container.appendChild(el('div', 'cbw-hint', t.loading)); return { stop: function (cb) { if (cb) cb(); } }; }
+      return loader(container, { word: word, font: lo.font, height: height, grid: grid, label: t.loading });
+    }
+    function loadBusyDays() {
+      if (!showBusy || !state.service || state.daysFor === state.service.id) return Promise.resolve();
+      var forSvc = state.daysFor = state.service.id;
+      state.fullDays = {};
+      return api('days', { service: forSvc }).then(function (r) {
+        if (!r || !r.full || state.daysFor !== forSvc) return;
+        state.fullDays = {};
+        r.full.forEach(function (d) { state.fullDays[d] = true; });
+        if (box.querySelector('.cbw-grid')) renderCalendar();
+      }).catch(function () {});
+    }
 
     function startOfMonth(d) { return new Date(d.getFullYear(), d.getMonth(), 1); }
 
@@ -364,6 +554,7 @@
       if (!matches.length) { renderServices(); return; } // no match → just show the normal list
       state.service = matches[0]; state.date = null; state.time = null; state.slots = null;
       renderCalendar();
+      loadBusyDays();
     }
 
     // ---- step 1: choose a service (skipped entirely if forceService is set) ----
@@ -379,6 +570,7 @@
         b.onclick = function () {
           state.service = s; state.date = null; state.time = null; state.slots = null;
           renderCalendar();
+          loadBusyDays();
         };
         list.appendChild(b);
       });
@@ -433,26 +625,32 @@
         (function (d) {
           var date = new Date(m.getFullYear(), m.getMonth(), d);
           var b = el('button', null, String(d));
-          b.disabled = !isDayOpen(date);
+          var full = isDayOpen(date) && state.fullDays[iso(date)];
+          b.disabled = !isDayOpen(date) || !!full;
+          if (full) { b.classList.add('full'); b.setAttribute('aria-label', d + ' (' + t.busyHint + ')'); }
           if (state.date === iso(date)) b.classList.add('sel');
           b.onclick = function () { state.date = iso(date); state.time = null; loadSlots(); renderCalendar(); };
           grid.appendChild(b);
         })(d);
       }
       v.appendChild(grid);
+      if (showBusy && Object.keys(state.fullDays).length) v.appendChild(el('div', 'cbw-legend', t.busyHint));
 
       var area = el('div');
       if (!state.date) {
         area.appendChild(el('div', 'cbw-hint', t.pickDay));
       } else if (state.loadingSlots) {
-        area.appendChild(el('div', 'cbw-hint', t.loading));
-      } else if (state.slots && !state.slots.length) {
+        showLoader(area, (lo && lo.slotsWord) || (lo && lo.word) || 'LOADING', 150, false);
+      } else if (state.slots && !state.slots.length && !(showBusy && state.taken && state.taken.length)) {
         area.appendChild(el('div', 'cbw-hint', t.noSlots));
       } else if (state.slots) {
         var slots = el('div', 'cbw-slots');
-        state.slots.forEach(function (s) {
-          var b = el('button', state.time === s ? 'sel' : '', s);
-          b.onclick = function () { state.time = s; renderForm(); };
+        var taken = showBusy ? (state.taken || []) : [];
+        state.slots.concat(taken).sort().forEach(function (s) {
+          var isTaken = taken.indexOf(s) !== -1;
+          var b = el('button', isTaken ? 'taken' : (state.time === s ? 'sel' : ''), s);
+          if (isTaken) { b.disabled = true; b.setAttribute('aria-label', s + ' (' + t.busyHint + ')'); }
+          else b.onclick = function () { state.time = s; renderForm(); };
           slots.appendChild(b);
         });
         area.appendChild(slots);
@@ -475,9 +673,10 @@
         if (state.date !== forDate) return; // stale
         state.loadingSlots = false;
         state.slots = r.slots || [];
+        state.taken = r.taken || [];
         renderCalendar();
       }).catch(function () {
-        state.loadingSlots = false; state.slots = [];
+        state.loadingSlots = false; state.slots = []; state.taken = [];
         renderCalendar();
       });
     }
@@ -560,7 +759,7 @@
           if (inputs[f]) payload[f] = inputs[f].value.trim();
         });
         api(null, null, payload).then(function (r) {
-          if (r && r.ok) return renderDone(payload);
+          if (r && r.ok) { state.daysFor = null; return renderDone(payload); }
           submit.disabled = back.disabled = false;
           submit.textContent = t.book;
           err.textContent = r && r.error === 'slot_taken' ? t.errTaken : t.errGeneric;
@@ -604,21 +803,42 @@
     }
 
     // ---- boot: fetch config, then decide which step to open on ----
-    box.appendChild(el('div', 'cbw-hint', t.loading));
+    var boot = showLoader(box, (lo && lo.word) || 'LOADING', 300, true);
+    var bootStart = Date.now(), minMs = lo && lo.minMs != null ? lo.minMs : 1100;
+    function afterBoot(fn) {
+      setTimeout(function () { boot.stop(fn); }, Math.max(0, minMs - (Date.now() - bootStart)));
+    }
+    // with a fixed service, fetch the busy days in parallel so the month
+    // view appears with them already crossed out (gives up waiting after 4s)
+    var daysReady = Promise.resolve();
+    if (forced) {
+      state.service = forced;
+      daysReady = Promise.race([loadBusyDays(), new Promise(function (res) { setTimeout(res, 4000); })]);
+    }
     api('config', {}).then(function (r) {
       state.remote = r;
       if (forced) {
-        state.service = forced; state.date = null; state.time = null; state.slots = null;
-        renderCalendar();
-      } else if (state.pendingService) {
-        var id = state.pendingService; state.pendingService = null;
-        selectServiceById(id);
+        daysReady.then(function () {
+          afterBoot(function () {
+            state.date = null; state.time = null; state.slots = null;
+            renderCalendar();
+          });
+        });
       } else {
-        renderServices();
+        afterBoot(function () {
+          if (state.pendingService) {
+            var id = state.pendingService; state.pendingService = null;
+            selectServiceById(id);
+          } else {
+            renderServices();
+          }
+        });
       }
     }).catch(function () {
-      box.innerHTML = '';
-      box.appendChild(el('div', 'cbw-err', t.errGeneric));
+      boot.stop(function () {
+        box.innerHTML = '';
+        box.appendChild(el('div', 'cbw-err', t.errGeneric));
+      });
     });
 
     return { selectService: selectServiceById };
