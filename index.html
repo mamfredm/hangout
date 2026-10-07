@@ -948,12 +948,12 @@
 <div class="screen" id="energy">
   <button class="back-link" id="backFromEnergy">‹ change plan</button>
   <div class="eyebrow">round three</div>
-  <h2>How hard are we going?</h2>
-  <p class="tag">set the energy level</p>
+  <h2 id="energyTitle">How hard are we going?</h2>
+  <p class="tag" id="energyTag">set the energy level</p>
   <div class="energy-emoji" id="energyEmoji" aria-hidden="true">😎</div>
   <div class="energy-label" id="energyLabel" aria-live="polite">good vibes, solid effort</div>
   <input type="range" class="range" id="energyRange" min="0" max="4" step="1" value="2" aria-label="Energy level">
-  <div class="range-ends"><span>couch mode</span><span>full send</span></div>
+  <div class="range-ends"><span id="energyEndL">couch mode</span><span id="energyEndR">full send</span></div>
   <label class="switch">
     <input type="checkbox" id="stakesToggle" checked>
     <span class="track"></span>
@@ -989,7 +989,7 @@
         <dl>
           <div><dt>Who</dt><dd id="psWho">you</dd></div>
           <div><dt>Plan</dt><dd id="psPlan">tba</dd></div>
-          <div><dt>Energy</dt><dd id="psEnergy">tba</dd></div>
+          <div><dt id="psEnergyLabel">Energy</dt><dd id="psEnergy">tba</dd></div>
           <div><dt>Stakes</dt><dd id="psStakes">none</dd></div>
           <div class="wide"><dt>When</dt><dd id="psWhen">TBA</dd></div>
         </dl>
@@ -1248,14 +1248,43 @@ const Ink = (() => {
     }
   };
 
-  // ✏️ energy slider steps (short = what goes into the calendar title)
-  const ENERGY = [
-    { emoji: '🛋️', label: 'chill & chat',             short: 'chill' },
-    { emoji: '😌', label: 'relaxed but present',       short: 'relaxed' },
-    { emoji: '😎', label: 'good vibes, solid effort',  short: 'good vibes' },
-    { emoji: '🔥', label: 'competitive mode',          short: 'competitive' },
-    { emoji: '🚀', label: 'full send, no survivors',   short: 'full send' }
-  ];
+  // ✏️ energy screen, one flavour per lane (short = what goes into the calendar title)
+  const ENERGY = {
+    food: {
+      title: 'How hungry are we?', tag: 'set the appetite level',
+      ends: ['light bite', 'food coma'], pass: 'Hunger',
+      steps: [
+        { emoji: '🥨', label: 'just a snack',               short: 'snack' },
+        { emoji: '🥗', label: 'light & civilised',          short: 'light' },
+        { emoji: '😋', label: 'proper hungry',              short: 'hungry' },
+        { emoji: '🍽️', label: 'starter, main, dessert',     short: 'three courses' },
+        { emoji: '🫃', label: 'food coma, carry me home',   short: 'food coma' }
+      ]
+    },
+    drinks: {
+      title: 'How wild are we going?', tag: 'set the night level',
+      ends: ['one and done', 'sunrise'], pass: 'Night level',
+      steps: [
+        { emoji: '🧃', label: 'one and done',               short: 'one drink' },
+        { emoji: '🍹', label: 'a couple, then bed',         short: 'a couple' },
+        { emoji: '🥂', label: 'good night out',             short: 'good night' },
+        { emoji: '🪩', label: 'dancefloor is calling',      short: 'dancing' },
+        { emoji: '🌅', label: 'see you at sunrise',         short: 'till sunrise' }
+      ]
+    },
+    sport: {
+      title: 'How hard are we going?', tag: 'set the energy level',
+      ends: ['couch mode', 'full send'], pass: 'Energy',
+      steps: [
+        { emoji: '🛋️', label: 'chill & chat',             short: 'chill' },
+        { emoji: '😌', label: 'relaxed but present',       short: 'relaxed' },
+        { emoji: '😎', label: 'good vibes, solid effort',  short: 'good vibes' },
+        { emoji: '🔥', label: 'competitive mode',          short: 'competitive' },
+        { emoji: '🚀', label: 'full send, no survivors',   short: 'full send' }
+      ]
+    }
+  };
+  const energyFor = cat => ENERGY[cat] || ENERGY.sport;
 
   // ✏️ screen 1: the "busy" button's labels + the captions it triggers
   const NO_LABELS = ['busy', 'kinda busy', 'I have a thing', 'washing my hair', 'my cat needs me',
@@ -1312,7 +1341,7 @@ const Ink = (() => {
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitHeadline);
   window.addEventListener('resize', fitHeadline);
 
-  const state = { cat: null, activity: null, energy: ENERGY[2], stakes: true };
+  const state = { cat: null, activity: null, energy: ENERGY.sport.steps[2], stakes: true };
 
   const screens = ['burst', 'category', 'sub', 'energy', 'bookTime', 'finalMsg'];
   function show(id) {
@@ -1546,20 +1575,36 @@ const Ink = (() => {
     state.activity = { label, emoji, viaWheel: !!viaWheel };
     cameFromWheel = !!viaWheel;
     updateStakesText();
+    applyEnergyFlavour();
     show('energy');
   }
 
   $('backFromEnergy').addEventListener('click', () => show(cameFromWheel ? 'category' : 'sub'));
 
-  $('energyRange').addEventListener('input', () => {
-    state.energy = ENERGY[+$('energyRange').value];
+  // re-skin the slider screen for the chosen lane; keep the slider position if the lane didn't change
+  let energyCat = null;
+  function applyEnergyFlavour() {
+    const e = energyFor(state.cat);
+    $('energyTitle').textContent = e.title;
+    $('energyTag').textContent = e.tag;
+    $('energyEndL').textContent = e.ends[0];
+    $('energyEndR').textContent = e.ends[1];
+    $('energyRange').setAttribute('aria-label', e.pass);
+    if (energyCat !== state.cat) { $('energyRange').value = 2; energyCat = state.cat; }
+    setEnergyStep(false);
+  }
+
+  function setEnergyStep(pop) {
+    state.energy = energyFor(state.cat).steps[+$('energyRange').value];
     $('energyEmoji').textContent = state.energy.emoji;
     $('energyLabel').textContent = state.energy.label;
+    if (!pop) return;
     $('energyEmoji').classList.remove('pop');
     void $('energyEmoji').offsetWidth;
     $('energyEmoji').classList.add('pop');
     if (navigator.vibrate) navigator.vibrate(8);
-  });
+  }
+  $('energyRange').addEventListener('input', () => setEnergyStep(true));
 
   function updateStakesText() {
     state.stakes = $('stakesToggle').checked;
@@ -1662,6 +1707,7 @@ const Ink = (() => {
   function fillPass(when) {
     $('psWho').textContent = friendName || 'you';
     $('psPlan').textContent = planLine();
+    $('psEnergyLabel').textContent = energyFor(state.cat).pass;
     $('psEnergy').textContent = state.energy.label;
     $('psStakes').textContent = state.stakes ? PLANS[state.cat].stakes : 'none (boring)';
     $('psWhen').textContent = when;
